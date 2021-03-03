@@ -20,7 +20,7 @@ class GenreYear:
 class MovieView(GenreYear, ListView):
 	model = Movie
 	queryset = Movie.objects.filter(draft=False)
-	
+	paginate_by = 1
 
 class MovieDetailView(GenreYear, DetailView):
 	model = Movie
@@ -53,47 +53,52 @@ class ActorView(GenreYear, DetailView):
 
 
 class FilterMovieView(GenreYear, ListView):
-
+	paginate_by = 2
 	def get_queryset(self):
 		queryset = Movie.objects.filter(
 			Q(year__in=self.request.GET.getlist("year"))|
 			Q(genres__in=self.request.GET.getlist("genre"))
-			)
+			).distinct()
 		return queryset
+	def get_context_data(self, *args, **kwargs):
+		context = super().get_context_data(*args, **kwargs)
+		context["year"] = ''.join([f"year={x}&" for x in self.request.GET.getlist("year")])
+		context["genre"] = ''.join([f"genre={x}&" for x in self.request.GET.getlist("genre")])
+		return context
 
 
 class JsonFilterMoviesView(ListView):
-    """Фильтр фильмов в json"""
-    def get_queryset(self):
-        queryset = Movie.objects.filter(
-            Q(year__in=self.request.GET.getlist("year")) |
-            Q(genres__in=self.request.GET.getlist("genre"))
-        ).distinct().values("title", "tagline", "url", "poster")
-        return queryset
+	"""Фильтр фильмов в json"""
+	def get_queryset(self):
+		queryset = Movie.objects.filter(
+			Q(year__in=self.request.GET.getlist("year")) |
+			Q(genres__in=self.request.GET.getlist("genre"))
+		).distinct().values("title", "tagline", "url", "poster")
+		return queryset
 
-    def get(self, request, *args, **kwargs):
-        queryset = list(self.get_queryset())
-        return JsonResponse({"movies": queryset}, safe=False)
+	def get(self, request, *args, **kwargs):
+		queryset = list(self.get_queryset())
+		return JsonResponse({"movies": queryset}, safe=False)
 
 
 class AddStarRating(View):
-    """Добавление рейтинга фильму"""
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+	"""Добавление рейтинга фильму"""
+	def get_client_ip(self, request):
+		x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+		if x_forwarded_for:
+			ip = x_forwarded_for.split(',')[0]
+		else:
+			ip = request.META.get('REMOTE_ADDR')
+		return ip
 
-    def post(self, request):
-        form = RatingForm(request.POST)
-        if form.is_valid():
-            Rating.objects.update_or_create(
-                ip=self.get_client_ip(request),
-                movie_id=int(request.POST.get("movie")),
-                defaults={'star_id': int(request.POST.get("star"))}
-            )
-            return HttpResponse(status=201)
-        else:
-            return HttpResponse(status=400)
+	def post(self, request):
+		form = RatingForm(request.POST)
+		if form.is_valid():
+			Rating.objects.update_or_create(
+				ip=self.get_client_ip(request),
+				movie_id=int(request.POST.get("movie")),
+				defaults={'star_id': int(request.POST.get("star"))}
+			)
+			return HttpResponse(status=201)
+		else:
+			return HttpResponse(status=400)
